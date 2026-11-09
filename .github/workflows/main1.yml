@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Android APK with Go Core
 on: [workflow_dispatch]
 
 jobs:
@@ -7,23 +7,48 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Автоматически настраиваем Java той версии, которая прописана в самом проекте
+      # 1. Устанавливаем Java (нужна для Android Studio / Gradle)
       - name: set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'zulu'
 
-      # Этот шаг автоматически подтянет правильную версию Gradle, указанную разработчиком в gradle-wrapper
+      # 2. Устанавливаем Go (нужен для компиляции ядра TiredVPN)
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      # 3. Устанавливаем Android NDK версии 27 (как требует инструкция)
+      - name: Install Android NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r27b
+          link-to-sdk: true
+
+      # 4. Прописываем пути к NDK для скрипта сборки
+      - name: Set NDK Environment Variable
+        run: |
+          echo "ANDROID_NDK_HOME=${ANDROID_NDK_ROOT}" >> $GITHUB_ENV
+
+      # 5. Запускаем скрипт компиляции Go-ядра в .so файл
+      - name: Build Go Native Library
+        run: |
+          chmod +x ./scripts/build-jni.sh
+          ./scripts/build-jni.sh
+
+      # 6. Настраиваем Gradle и кэш
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-        
-      - name: Build with Gradle
-        run: ./gradlew assembleDebug --no-daemon
+      # 7. Компилируем финальный APK-файл
+      - name: Build APK with Gradle
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
 
+      # 8. Сохраняем готовый файл в Артефакты для скачивания
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
